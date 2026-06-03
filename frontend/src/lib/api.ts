@@ -1,7 +1,8 @@
 import type { ChatResponse, MessagesResponse, StreamEvent, ConversationsResponse } from './types';
 
 // Read the API base URL from env, or default to the Vite proxy path
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+// Strip trailing slashes to prevent double-slash in constructed URLs (e.g. "https://...//chat/message")
+const API_BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/+$/, '');
 
 /**
  * Generate a unique idempotency key for each message.
