@@ -34,7 +34,7 @@ app.use(cors({
     }
     // Strip trailing slash from origin before comparing
     const normalized = origin.replace(/\/+$/, '');
-    if (allowedOrigins.some(o => normalized.startsWith(o))) {
+    if (allowedOrigins.some(o => normalized === o)) {
       return callback(null, true);
     }
     console.warn(`[CORS] Blocked origin: ${origin}`);
