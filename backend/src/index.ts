@@ -62,6 +62,32 @@ app.use('/chat', chatRateLimit, chatRouter);
 // Error handler (must be after routes)
 app.use(errorHandler);
 
+// ===== Keep-Alive: prevents Render free tier from spinning down =====
+// Pings self every 10 minutes to keep the service awake
+const KEEPALIVE_INTERVAL = 10 * 60 * 1000; // 10 minutes
+const KEEPALIVE_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+
+function startKeepAlive() {
+  console.log(`[KeepAlive] Starting self-ping every 10 minutes to ${KEEPALIVE_URL}/health`);
+  setInterval(async () => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      const res = await fetch(`${KEEPALIVE_URL}/health`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const data = await res.json() as { status?: string; timestamp?: string };
+        console.log(`[KeepAlive] Ping successful — status: ${data.status}, time: ${data.timestamp}`);
+      }
+    } catch (err) {
+      // Silently fail — keep-alive is best-effort
+      console.warn(`[KeepAlive] Ping failed (expected during first few seconds): ${err instanceof Error ? err.message : err}`);
+    }
+  }, KEEPALIVE_INTERVAL);
+}
+
 // Start server
 async function start() {
   // Connect to Redis (non-blocking - app works without it)
@@ -71,6 +97,9 @@ async function start() {
     console.log(`[Server] AI Chat Agent backend running on http://localhost:${PORT}`);
     console.log(`[Server] LLM Model: ${process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'}`);
   });
+
+  // Start keep-alive after a delay to let the server fully boot
+  setTimeout(startKeepAlive, 5000);
 }
 
 // Graceful shutdown

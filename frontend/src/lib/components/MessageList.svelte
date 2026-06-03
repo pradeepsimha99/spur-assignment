@@ -14,6 +14,7 @@
 	} = $props();
 
 	let messagesContainer: HTMLDivElement | undefined = $state();
+	let showScrollButton = $state(false);
 
 	$effect(() => {
 		if (messages.length || isTyping || isStreaming) {
@@ -24,6 +25,21 @@
 			});
 		}
 	});
+
+	function handleScroll() {
+		if (!messagesContainer) return;
+		const { scrollTop, scrollHeight, clientHeight } = messagesContainer;
+		// Show button when scrolled up more than 200px from bottom
+		showScrollButton = scrollHeight - scrollTop - clientHeight > 200;
+	}
+
+	function scrollToBottom() {
+		if (!messagesContainer) return;
+		messagesContainer.scrollTo({
+			top: messagesContainer.scrollHeight,
+			behavior: 'smooth'
+		});
+	}
 
 	function formatTime(date: Date): string {
 		const d = new Date(date);
@@ -70,126 +86,183 @@
 		return distanceFromEnd * 0.05 + 's';
 	}
 
-	// Static SVG icons for avatars (safe for @html since these are internal strings)
 	const userIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
 	const aiIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 0 1 10 10c0 2.76-1.12 5.26-2.93 7.07L19 22l-2.93-1.93A10 10 0 1 1 12 2z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="9" y1="11" x2="15" y2="11"/></svg>';
 </script>
 
-<div
-	bind:this={messagesContainer}
-	class="messages-container"
-	role="log"
-	aria-live="polite"
-	aria-label="Chat messages"
->
-	{#if messages.length === 0 && !isTyping}
-		<div class="empty-state">
-			<div class="empty-icon-container">
-				<div class="empty-icon-glow"></div>
-				<div class="empty-icon">✨</div>
-			</div>
-			<h2 class="empty-heading">Welcome to Spur Support</h2>
-			<p class="empty-description">
-				I'm your AI assistant. Ask me about shipping, returns, products, or anything about our store!
-			</p>
-			<div class="suggestions">
-				<button
-					class="suggestion-chip"
-					onclick={() => window.dispatchEvent(new CustomEvent('suggest-message', { detail: "What's your return policy?" }))}
-				>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-						<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-					</svg>
-					Return policy
-				</button>
-				<button
-					class="suggestion-chip"
-					onclick={() => window.dispatchEvent(new CustomEvent('suggest-message', { detail: 'Do you ship internationally?' }))}
-				>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-						<circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" />
-						<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-					</svg>
-					International shipping
-				</button>
-				<button
-					class="suggestion-chip"
-					onclick={() => window.dispatchEvent(new CustomEvent('suggest-message', { detail: 'What are your support hours?' }))}
-				>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-						<circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-					</svg>
-					Support hours
-				</button>
-			</div>
-		</div>
-	{:else}
-		{#each messages as message, i (message.id)}
-			{@const msgDate = new Date(message.timestamp)}
-			{@const prevMsg = messages[i - 1]}
-			{@const showDateSep = !prevMsg || isNewDay(msgDate, new Date(prevMsg.timestamp))}
-
-			{#if showDateSep}
-				<div class="date-separator">
-					<span class="date-separator-line"></span>
-					<span class="date-separator-text">{formatDateSeparator(msgDate)}</span>
-					<span class="date-separator-line"></span>
+<div class="messages-wrapper">
+	<div
+		bind:this={messagesContainer}
+		class="messages-container"
+		role="log"
+		aria-live="polite"
+		aria-label="Chat messages"
+		onscroll={handleScroll}
+	>
+		{#if messages.length === 0 && !isTyping}
+			<div class="empty-state">
+				<div class="empty-icon-container">
+					<div class="empty-icon-glow"></div>
+					<div class="empty-icon">✨</div>
 				</div>
-			{/if}
-
-			<div
-				class="message-wrapper {message.sender}"
-				class:user={message.sender === 'user'}
-				class:ai={message.sender === 'ai'}
-				style="animation-delay: {getMessageAnimationDelay(i, messages.length)}"
-			>
-				<div class="avatar" class:user-avatar={message.sender === 'user'} class:ai-avatar={message.sender === 'ai'}>
-					{#if message.sender === 'user'}
-						{@html userIcon}
-					{:else}
-						{@html aiIcon}
-					{/if}
+				<h2 class="empty-heading">Welcome to Spur Support</h2>
+				<p class="empty-description">
+					I'm your AI assistant. Ask me about shipping, returns, products, or anything about our store!
+				</p>
+				<div class="suggestions">
+					<button
+						class="suggestion-chip"
+						onclick={() => window.dispatchEvent(new CustomEvent('suggest-message', { detail: "What's your return policy?" }))}
+					>
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+						</svg>
+						Return policy
+					</button>
+					<button
+						class="suggestion-chip"
+						onclick={() => window.dispatchEvent(new CustomEvent('suggest-message', { detail: 'Do you ship internationally?' }))}
+					>
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" />
+							<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+						</svg>
+						International shipping
+					</button>
+					<button
+						class="suggestion-chip"
+						onclick={() => window.dispatchEvent(new CustomEvent('suggest-message', { detail: 'What are your support hours?' }))}
+					>
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+						</svg>
+						Support hours
+					</button>
 				</div>
-				<div class="message-bubble" class:user-bubble={message.sender === 'user'} class:ai-bubble={message.sender === 'ai'}>
-					<div class="message-sender">{message.sender === 'user' ? 'You' : 'Spur AI'}</div>
-					<div class="message-text">
-						{message.text}
-						{#if lastMsgIsStreaming && message === lastMessage && !streamedText}
-							<span class="streaming-cursor">|</span>
+			</div>
+		{:else}
+			{#each messages as message, i (message.id)}
+				{@const msgDate = new Date(message.timestamp)}
+				{@const prevMsg = messages[i - 1]}
+				{@const showDateSep = !prevMsg || isNewDay(msgDate, new Date(prevMsg.timestamp))}
+
+				{#if showDateSep}
+					<div class="date-separator">
+						<span class="date-separator-line"></span>
+						<span class="date-separator-text">{formatDateSeparator(msgDate)}</span>
+						<span class="date-separator-line"></span>
+					</div>
+				{/if}
+
+				<div
+					class="message-wrapper {message.sender}"
+					class:user={message.sender === 'user'}
+					class:ai={message.sender === 'ai'}
+					style="animation-delay: {getMessageAnimationDelay(i, messages.length)}"
+				>
+					<div class="avatar" class:user-avatar={message.sender === 'user'} class:ai-avatar={message.sender === 'ai'}>
+						{#if message.sender === 'user'}
+							{@html userIcon}
+						{:else}
+							{@html aiIcon}
 						{/if}
 					</div>
-					{#if message.text || (!lastMsgIsStreaming || message !== lastMessage)}
-						<div class="message-time" title={msgDate.toLocaleString()}>{formatTime(msgDate)}</div>
-					{/if}
-				</div>
-			</div>
-		{/each}
-
-		{#if isTyping}
-			<div class="message-wrapper ai" style="animation-delay: 0s">
-				<div class="avatar ai-avatar">
-					{@html aiIcon}
-				</div>
-				<div class="message-bubble ai-bubble typing-bubble">
-					<div class="typing-indicator">
-						<span></span><span></span><span></span>
+					<div class="message-bubble" class:user-bubble={message.sender === 'user'} class:ai-bubble={message.sender === 'ai'}>
+						<div class="message-sender">{message.sender === 'user' ? 'You' : 'Spur AI'}</div>
+						<div class="message-text">
+							{message.text}
+							{#if lastMsgIsStreaming && message === lastMessage && !streamedText}
+								<span class="streaming-cursor">|</span>
+							{/if}
+						</div>
+						{#if message.text || (!lastMsgIsStreaming || message !== lastMessage)}
+							<div class="message-time" title={msgDate.toLocaleString()}>{formatTime(msgDate)}</div>
+						{/if}
 					</div>
 				</div>
-			</div>
+			{/each}
+
+			{#if isTyping}
+				<div class="message-wrapper ai" style="animation-delay: 0s">
+					<div class="avatar ai-avatar">
+						{@html aiIcon}
+					</div>
+					<div class="message-bubble ai-bubble typing-bubble">
+						<div class="typing-indicator">
+							<span></span><span></span><span></span>
+						</div>
+					</div>
+				</div>
+			{/if}
 		{/if}
+	</div>
+
+	<!-- Scroll to bottom button -->
+	{#if showScrollButton}
+		<button class="scroll-to-bottom" onclick={scrollToBottom} title="Scroll to bottom" aria-label="Scroll to bottom">
+			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+				<polyline points="6 9 12 15 18 9" />
+			</svg>
+		</button>
 	{/if}
 </div>
 
 <style>
-	.messages-container {
+	.messages-wrapper {
 		flex: 1;
+		position: relative;
+		overflow: hidden;
+		min-height: 0;
+	}
+
+	.messages-container {
+		height: 100%;
 		overflow-y: auto;
-		padding: 1.25rem 1.5rem;
+		padding: 1.25rem 1.5rem 1rem;
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
 		scroll-behavior: smooth;
 		background: var(--color-bg);
+	}
+
+	/* ===== Scroll to Bottom Button ===== */
+	.scroll-to-bottom {
+		position: absolute;
+		bottom: 1rem;
+		right: 1.25rem;
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		background: var(--color-surface);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-full);
+		padding: 0.45rem 0.8rem 0.45rem 0.6rem;
+		color: var(--color-primary);
+		cursor: pointer;
+		font-family: inherit;
+		font-size: 0.75rem;
+		font-weight: 500;
+		box-shadow: var(--shadow-lg);
+		transition: all var(--transition-fast);
+		animation: fadeInUp 0.25s ease;
+		z-index: 5;
+	}
+
+	.scroll-to-bottom:hover {
+		background: var(--color-primary);
+		color: white;
+		border-color: var(--color-primary);
+		transform: translateY(-2px);
+		box-shadow: var(--shadow-xl);
+	}
+
+	.scroll-to-bottom:active {
+		transform: translateY(0);
+	}
+
+	.scroll-badge {
+		font-size: 0.7rem;
 	}
 
 	/* ===== Date Separator ===== */
