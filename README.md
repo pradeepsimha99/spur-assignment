@@ -2,6 +2,14 @@
 
 A full-stack AI-powered live chat support agent for a fictional e-commerce store. Built as a take-home assignment for Spur.
 
+## 🚀 Live Deployments
+
+| Layer | URL |
+|-------|-----|
+| **Frontend (Vercel)** | [https://spur-assignment-sable.vercel.app](https://spur-assignment-sable.vercel.app) |
+| **Backend (Render)** | [https://spur-assignment-backend-hiv1.onrender.com](https://spur-assignment-backend-hiv1.onrender.com) |
+| **Health Check** | [https://spur-assignment-backend-hiv1.onrender.com/health](https://spur-assignment-backend-hiv1.onrender.com/health) |
+
 ## Features
 
 - **Real-time AI Chat** — Interactive chat widget with user/AI message distinction
@@ -102,12 +110,6 @@ RATE_LIMIT_HEALTH_WINDOW=60       # Rate limit window in seconds
 FRONTEND_URL="http://localhost:5173"
 ```
 
-**Frontend** — Copy `frontend/.env.example` to `frontend/.env`:
-
-```bash
-cp frontend/.env.example frontend/.env
-```
-
 ### 3. Create PostgreSQL Database
 
 Make sure PostgreSQL is running, then create the database:
@@ -118,9 +120,6 @@ createdb -U postgres spur_chat
 
 # Option B — using psql
 psql -U postgres -c "CREATE DATABASE spur_chat;"
-
-# Option C — using pgAdmin
-# Open pgAdmin, create a new database named "spur_chat"
 ```
 
 ### 4. Run Database Migrations
@@ -139,8 +138,6 @@ This creates the `conversations` and `messages` tables.
 docker compose up -d
 ```
 
-> **Note:** The backend logs the Redis connection target (e.g., `redis://localhost:6379`). If you see `[Cache] Redis connected successfully.` but no Redis container in Docker Desktop, Redis may be running natively on your machine rather than in Docker. This is fine — the app works either way.
-
 ### 6. Start the Backend
 
 **For development (with hot reload):**
@@ -153,7 +150,7 @@ npm run dev
 > The backend starts on `http://localhost:3001`. Verify it's running:
 > ```bash
 > curl http://localhost:3001/health
-> # → {"status":"ok","timestamp":"...","cache":{"connected":false,"stats":{"hits":0,"misses":0,"sets":0,"deletes":0,"hitRate":0}}}
+> # → {"status":"ok","timestamp":"...","cache":{"connected":false,...}}
 > ```
 
 **For production (builds TypeScript first):**
@@ -176,41 +173,176 @@ The frontend starts on `http://localhost:5173`.
 
 Navigate to [http://localhost:5173](http://localhost:5173) in your browser.
 
-## Troubleshooting Common Errors
+---
 
-### `POST /chat/message → 500 Internal Server Error`
+## 🚀 Deployment Guide (Step-by-Step)
+
+### Deploy Backend to Render (Free Tier)
+
+#### Step 1 — Create PostgreSQL Database
+
+1. Go to [https://dashboard.render.com](https://dashboard.render.com) → **Sign in with GitHub**
+2. Click **New +** → **PostgreSQL**
+3. Fill in:
+
+   | Field | Value |
+   |-------|-------|
+   | **Name** | `spur-assignment-db` |
+   | **Database** | `spur_chat` |
+   | **User** | `postgres` |
+   | **Plan** | **Free** ($0/month) |
+   | **Region** | Choose closest to you |
+
+4. Click **Create Database** and wait ~2 minutes
+5. Copy the **Internal Database URL** (starts with `postgresql://...`) — save this for Step 2
+
+#### Step 2 — Create Web Service
+
+1. Click **New +** → **Web Service**
+2. Connect your GitHub repo: `pradeepsimha99/spur-assignment`
+3. Configure:
+
+   | Field | Value |
+   |-------|-------|
+   | **Name** | `spur-assignment-backend` |
+   | **Runtime** | `Node` |
+   | **Root Directory** | `backend` |
+   | **Build Command** | `npm install && npx prisma generate && npm run build` |
+   | **Start Command** | `npx prisma migrate deploy && node dist/index.js` |
+   | **Plan** | **Free** |
+   | **Health Check Path** | `/health` |
+
+4. Click **Advanced** → **Add Environment Variables**:
+
+   | Key | Value |
+   |-----|-------|
+   | `NODE_ENV` | `production` |
+   | `PORT` | `3001` |
+   | `DATABASE_URL` | *(Internal Database URL from Step 1)* |
+   | `GROQ_API_KEY` | *(Your Groq API key)* |
+   | `GROQ_BASE_URL` | `https://api.groq.com/openai/v1` |
+   | `GROQ_MODEL` | `llama-3.3-70b-versatile` |
+   | `LLM_MAX_TOKENS` | `500` |
+   | `LLM_MAX_MESSAGES` | `20` |
+   | `LLM_TEMPERATURE` | `0.7` |
+   | `REDIS_ENABLED` | `false` |
+   | `FRONTEND_URL` | `https://spur-assignment-sable.vercel.app` *(update after Vercel deploy)* |
+
+5. Click **Create Web Service**
+6. Wait ~5 minutes for build. Verify with:
+   ```bash
+   curl https://spur-assignment-backend-hiv1.onrender.com/health
+   # → {"status":"ok",...}
+   ```
+
+### Deploy Frontend to Vercel (Free Tier)
+
+#### Step 1 — Import Project
+
+1. Go to [https://vercel.com](https://vercel.com) → **Sign in with GitHub**
+2. Click **Add New...** → **Project**
+3. Select `pradeepsimha99/spur-assignment`
+4. Click **Import**
+
+#### Step 2 — Configure Project
+
+| Setting | Value |
+|---------|-------|
+| **Framework Preset** | SvelteKit (auto-detected) |
+| **Root Directory** | `frontend` |
+| **Build Command** | `npm run build` (auto-filled) |
+| **Output Directory** | `build` (auto-filled) |
+| **Install Command** | `npm install` |
+
+#### Step 3 — Add Environment Variables
+
+Click **Environment Variables** and add:
+
+| Key | Value |
+|-----|-------|
+| `VITE_API_URL` | `https://spur-assignment-backend-hiv1.onrender.com` |
+
+> ⚠️ **Important:** The code automatically strips any trailing slash, so `https://spur-assignment-backend-hiv1.onrender.com` and `https://spur-assignment-backend-hiv1.onrender.com/` both work fine.
+
+#### Step 4 — Deploy
+
+1. Click **Deploy**
+2. Wait ~2 minutes for build
+3. Your frontend URL: `https://spur-assignment-sable.vercel.app`
+
+#### Step 5 — Link Backend → Frontend
+
+Go back to **Render Dashboard** → `spur-assignment-backend` → **Environment** → Update:
+
+| Key | Value |
+|-----|-------|
+| `FRONTEND_URL` | `https://spur-assignment-sable.vercel.app` |
+
+Click **Manual Deploy** → **Deploy latest commit** to restart the backend.
+
+### Post-Deployment Verification
+
+```bash
+# Test backend health
+curl https://spur-assignment-backend-hiv1.onrender.com/health
+
+# Test CORS headers (should return the origin header)
+curl -H "Origin: https://spur-assignment-sable.vercel.app" \
+  https://spur-assignment-backend-hiv1.onrender.com/health -I
+
+# Test conversations endpoint
+curl https://spur-assignment-backend-hiv1.onrender.com/chat/conversations
+
+# Test chat message
+curl -X POST https://spur-assignment-backend-hiv1.onrender.com/chat/message \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Hello","idempotencyKey":"test-1"}'
+```
+
+> 💡 **Reminder:** If you haven't already, set `FRONTEND_URL` on Render to `https://spur-assignment-sable.vercel.app` and redeploy the backend (see Step 5 above).
+
+Then open `https://spur-assignment-sable.vercel.app` in your browser and verify:
+- ✅ Chat widget loads with sidebar
+- ✅ Sending a message works with streaming response
+- ✅ Conversation appears in sidebar after sending
+- ✅ Click conversation to reopen history
+
+---
+
+## Troubleshooting
+
+### CORS Errors in Production
+
+**Symptom:** Browser shows CORS errors when frontend tries to call backend.
 
 **Causes & Fixes:**
 
 | Cause | Fix |
 |-------|-----|
-| PostgreSQL not running | Start PostgreSQL service |
-| Database doesn't exist | Run `createdb -U postgres spur_chat` |
-| Migrations not run | Run `npx prisma migrate dev --name init` |
-| Missing `.env` file | Copy `.env.example` to `.env` and fill in values |
-| Wrong `DATABASE_URL` | Check your PostgreSQL host, port, user, password |
-| No `GROQ_API_KEY` | Set your Groq API key in `.env` |
+| `FRONTEND_URL` not set on Render | Set `FRONTEND_URL` env var in Render dashboard to your Vercel URL |
+| `VITE_API_URL` not set on Vercel | Set `VITE_API_URL` env var in Vercel project settings to your Render URL |
+| Trailing slash mismatch | The code strips trailing slashes automatically. Ensure `VITE_API_URL` has no trailing slash when setting it |
+| Wrong URL format | Make sure there's no `https://` duplication. Example: `https://spur-assignment-backend-hiv1.onrender.com` (correct) |
 
-### `Redis connection failed` (warning)
+### Double Slash in URLs (`//chat/message`)
 
-This is harmless. The app works perfectly without Redis — caching is just disabled. The console now also shows the connection target URL and Docker guidance.
+**Symptom:** Requests go to `https://...//chat/message` and return 404.
 
-### Redis "connected" but no container in Docker Desktop
+**Fix:** If you set `VITE_API_URL` on Vercel with a trailing slash, the frontend now strips it automatically. Just redeploy the frontend after pulling the latest code.
 
-The console now logs:
-```
-[Cache] Redis connected successfully.
-[Cache] Connection target: redis://localhost:6379 — verify this matches your Docker container.
-[Cache] If you cannot see the Redis container in Docker Desktop, ensure you ran: docker compose up -d
-[Cache] A local/native Redis installation will also connect but won't appear in Docker Desktop.
-```
+### Backend 404 on `/chat/conversations`
 
-This means Redis is running somewhere accessible at `localhost:6379` — it could be:
-- Running natively on your machine (common on macOS with Homebrew)
-- Running in WSL (Windows Subsystem for Linux)
-- Running via Docker but in a different Docker context
+**Symptom:** Getting `Cannot GET /chat/conversations` even though the route exists in code.
 
-To see it in Docker Desktop, run `docker compose up -d` from the project root.
+**Fix:** The backend server is running old code. Go to Render → **Manual Deploy** → **Deploy latest commit**. The `GET /chat/conversations` route was added in a recent update.
+
+### Render Free Tier — App is Slow
+
+**Cause:** Free tier sleeps after 15 minutes of inactivity. First request takes ~30 seconds to wake up.
+
+**Fix:** This is normal. Just wait for the response.
+
+---
 
 ## Conversation Sidebar
 
@@ -232,6 +364,24 @@ Every chat message is protected against duplicate processing:
 - Idempotency keys expire after 1 hour (configurable via `IDEMPOTENCY_TTL`)
 - **Fallback**: Uses Redis if available, otherwise an in-memory store (capped at 1000 entries)
 
+## CORS Configuration
+
+The backend CORS is configured to accept requests from multiple origins:
+
+```ts
+const allowedOrigins = [
+  'http://localhost:5173',           // Local frontend dev server
+  'http://localhost:3001',           // Local backend
+  'https://spur-assignment-sable.vercel.app', // Production Vercel URL
+];
+```
+
+Additionally, the `FRONTEND_URL` environment variable adds your custom frontend URL. The CORS handler:
+- Strips trailing slashes from origins before comparing
+- Supports `OPTIONS` preflight requests
+- Sets `credentials: true` for cookie/auth support
+- Logs blocked origins to the console for debugging
+
 ## Running Tests
 
 ### Backend Tests (59 tests)
@@ -245,7 +395,7 @@ Tests cover:
 - **Validation middleware** (11 tests) — empty messages, long messages, missing fields, sessionId/idempotencyKey validation
 - **LLM service** (7 tests) — Groq API integration, error handling (401, 429, timeout), conversation history
 - **Conversation service** (7 tests) — CRUD operations, session creation, message persistence
-- **Chat routes** (12 tests) — Full request/response cycle, error scenarios, session handling, **idempotency** (2 new)
+- **Chat routes** (12 tests) — Full request/response cycle, error scenarios, session handling, **idempotency** (2 tests)
 - **Health check** (1 test) — Endpoint returns status ok with cache info
 - **Redis cache** (17 tests) — Cache stats, key generation, TTL config, graceful degradation
 - **Rate limiting** (4 tests) — Redis-backed rate limiter with graceful fallback
@@ -349,7 +499,7 @@ spur-assignment/
 ├── backend/
 │   ├── Dockerfile                # Production Docker image
 │   └── src/
-│       ├── index.ts              # Express server (loads dotenv, CORS, rate limiting)
+│       ├── index.ts              # Express server (dotenv, CORS, rate limiting)
 │       ├── routes/
 │       │   ├── chat.ts           # Chat routes: /message, /message/stream, /conversations, /:sessionId/messages
 │       │   ├── chat.test.ts      # 12 integration tests (supertest)
@@ -373,7 +523,6 @@ spur-assignment/
 │       └── test-setup.ts         # Global mocks (Prisma, OpenAI, Redis)
 ├── frontend/
 │   ├── Dockerfile                # Production Docker image
-│   ├── vercel.json               # Vercel deployment config
 │   └── src/
 │       ├── routes/
 │       │   └── +page.svelte      # Main chat page
@@ -387,8 +536,7 @@ spur-assignment/
 │               ├── MessageList.svelte       # Scrollable message list
 │               └── MessageInput.svelte      # Input box with send button
 ├── docker-compose.yml            # Full-stack: PostgreSQL + Redis + Backend + Frontend
-├── render.yaml                   # Render Blueprint (backend + PostgreSQL)
-├── vercel.json                   # Vercel config (frontend)
+├── vercel.json                   # Vercel deployment config
 ├── .gitignore
 └── README.md
 ```
@@ -441,64 +589,6 @@ The system prompt includes a complete fictional store profile (SpurStore) with s
 7. **Admin dashboard** — View all active conversations with analytics.
 8. **End-to-end tests** — Integration tests with a real test database and actual LLM calls.
 
-## Deployment
+## Project Repository
 
-### Backend → Render, Frontend → Vercel
-
-The app is configured for split deployment:
-
-#### 1. Push to GitHub
-
-```bash
-git init
-git add .
-git commit -m "Initial commit"
-git remote add origin https://github.com/your-username/spur-assignment.git
-git push -u origin main
-```
-
-#### 2. Deploy Backend to Render
-
-1. Go to [Render Dashboard](https://dashboard.render.com) → **New** → **Blueprint**
-2. Connect your GitHub repo
-3. Render reads `render.yaml` and creates:
-   - PostgreSQL database (`spur-assignment-db`)
-   - Backend web service
-4. **After deployment**, go to the backend service → **Environment** → add:
-   - `GROQ_API_KEY`: Your key from [console.groq.com](https://console.groq.com/keys)
-   - `FRONTEND_URL`: Your Vercel app URL (e.g., `https://spur-assignment.vercel.app`)
-5. Note your backend URL (e.g., `https://spur-assignment-backend.onrender.com`)
-
-#### 3. Deploy Frontend to Vercel
-
-1. Go to [Vercel Dashboard](https://vercel.com) → **Add New** → **Project**
-2. Import your GitHub repo
-3. **Framework preset**: SvelteKit (auto-detected)
-4. **Root directory**: `frontend/`
-5. **Environment Variables**:
-   - `VITE_API_URL`: Your Render backend URL (e.g., `https://spur-assignment-backend.onrender.com`)
-6. **Build Command**: `npm run build`
-7. **Output Directory**: `build/`
-8. Deploy
-
-#### 4. Update Render FRONTEND_URL
-
-After Vercel deploys, update the Render backend's `FRONTEND_URL` env var to your Vercel URL.
-
-### Docker Compose (Full Stack)
-
-For local production-like testing:
-
-```bash
-export GROQ_API_KEY=gsk_your_key_here
-docker compose up --build
-```
-
-This starts: PostgreSQL (`:5432`), Redis (`:6379`), Backend (`:3001`), Frontend (`:5173`).
-
-### Manual Deploy
-
-**Backend**: Render, Railway, or Fly.io — set all env vars, run `npx prisma migrate deploy`, start with `npm start`.
-**Frontend**: Vercel — build command `npm run build`, output dir `build/`, set `VITE_API_URL`.
-**Database**: Managed PostgreSQL (Render, Supabase, Railway).
-**Redis** (optional): Redis Cloud, Upstash, or Render Redis.
+- **GitHub**: [https://github.com/pradeepsimha99/spur-assignment](https://github.com/pradeepsimha99/spur-assignment)
