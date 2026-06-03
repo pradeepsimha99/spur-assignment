@@ -1,23 +1,9 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-
 	let { disabled = false, onSend }: { disabled?: boolean; onSend: (text: string) => void } = $props();
 
 	let inputText = $state('');
 	let inputRef: HTMLInputElement | undefined = $state();
 	let isFocused = $state(false);
-
-	onMount(() => {
-		// Listen for Ctrl+K shortcut to focus input
-		window.addEventListener('focus-message-input', handleFocusRequest);
-		return () => window.removeEventListener('focus-message-input', handleFocusRequest);
-	});
-
-	function handleFocusRequest() {
-		if (inputRef && !disabled) {
-			inputRef.focus();
-		}
-	}
 
 	function handleSubmit() {
 		const text = inputText.trim();

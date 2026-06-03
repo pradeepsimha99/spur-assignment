@@ -21,8 +21,12 @@
 	let isMobile = $state(false);
 	let darkMode = $state(false);
 
-	// Keep a reference to the input for keyboard shortcut focus
-	let messageInputRef: HTMLInputElement | undefined = $state();
+	// Undo / Redo history
+	let messageHistory = $state<Message[][]>([]);
+	let undoneHistory = $state<Message[][]>([]);
+	let canUndo = $derived(messageHistory.length > 0);
+	let canRedo = $derived(undoneHistory.length > 0);
+
 	let chatWidgetRef: HTMLDivElement | undefined = $state();
 
 	onMount(() => {
@@ -70,70 +74,10 @@
 		};
 		window.addEventListener('resize', handleResize);
 
-		// === Keyboard Shortcuts ===
-		const handleKeyboard = (e: KeyboardEvent) => {
-			// ── Skip modifier-only key presses (Ctrl, Shift, etc. pressed alone) ──
-			if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
-				return;
-			}
-
-			// ── Never intercept browser DevTools shortcuts ──
-			if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i', 'j', 'c'].includes(e.key.toLowerCase())) {
-				return;
-			}
-			// F12 — DevTools
-			if (e.key === 'F12') {
-				return;
-			}
-
-			// ── Don't trigger app shortcuts when typing in an input ──
-			const target = e.target as HTMLElement;
-			const isInputFocused = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
-
-			const key = e.key.toLowerCase();
-			const mod = e.ctrlKey || e.metaKey;
-
-			// Ctrl/Cmd + Shift + D — Toggle dark mode
-			if (mod && e.shiftKey && key === 'd') {
-				e.preventDefault();
-				toggleTheme();
-				return;
-			}
-
-			// Ctrl/Cmd + Shift + N — New conversation
-			if (mod && e.shiftKey && key === 'n') {
-				e.preventDefault();
-				handleNewChat();
-				return;
-			}
-
-			// Ctrl/Cmd + K — Focus message input (unless already typing)
-			if (mod && key === 'k' && !isInputFocused) {
-				e.preventDefault();
-				focusInput();
-				return;
-			}
-
-			// Escape — Close sidebar on mobile
-			if (key === 'escape' && sidebarOpen && isMobile) {
-				e.preventDefault();
-				sidebarOpen = false;
-				return;
-			}
-		};
-
-		document.addEventListener('keydown', handleKeyboard);
-
 		return () => {
 			window.removeEventListener('resize', handleResize);
-			document.removeEventListener('keydown', handleKeyboard);
 		};
 	});
-
-	function focusInput() {
-		// Dispatch a custom event that MessageInput listens to
-		window.dispatchEvent(new CustomEvent('focus-message-input'));
-	}
 
 	function toggleTheme() {
 		darkMode = !darkMode;
@@ -187,8 +131,46 @@
 		return crypto.randomUUID();
 	}
 
+	function playNotificationSound() {
+		try {
+			const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+			const oscillator = ctx.createOscillator();
+			const gain = ctx.createGain();
+			oscillator.connect(gain);
+			gain.connect(ctx.destination);
+			oscillator.frequency.value = 660;
+			oscillator.type = 'sine';
+			gain.gain.setValueAtTime(0.15, ctx.currentTime);
+			gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+			oscillator.start(ctx.currentTime);
+			oscillator.stop(ctx.currentTime + 0.4);
+		} catch {
+			// Audio not available
+		}
+	}
+
+	function handleUndo() {
+		if (messageHistory.length === 0) return;
+		const previous = messageHistory[messageHistory.length - 1];
+		undoneHistory = [...undoneHistory, [...messages]];
+		messageHistory = messageHistory.slice(0, -1);
+		messages = previous;
+	}
+
+	function handleRedo() {
+		if (undoneHistory.length === 0) return;
+		const next = undoneHistory[undoneHistory.length - 1];
+		messageHistory = [...messageHistory, [...messages]];
+		undoneHistory = undoneHistory.slice(0, -1);
+		messages = next;
+	}
+
 	async function handleSend(text: string) {
 		if (isMobile) sidebarOpen = false;
+
+		// Save current messages for undo before sending
+		messageHistory = [...messageHistory, [...messages]];
+		undoneHistory = []; // Clear redo stack on new action
 
 		const userMsg: Message = {
 			id: generateId(),
@@ -238,6 +220,11 @@
 			streamedText = '';
 			status = 'idle';
 			refreshConversations();
+
+			// Play notification sound if tab is in the background
+			if (document.hidden) {
+				playNotificationSound();
+			}
 		} catch (err) {
 			try {
 				status = 'sending';
@@ -252,6 +239,11 @@
 				streamedText = '';
 				status = 'idle';
 				refreshConversations();
+
+				// Play notification sound if tab is in the background
+				if (document.hidden) {
+					playNotificationSound();
+				}
 			} catch (fallbackErr) {
 				status = 'error';
 				const errorText = fallbackErr instanceof Error ? fallbackErr.message : 'Something went wrong. Please try again.';
@@ -272,11 +264,16 @@
 	}
 
 	function handleNewChat() {
+		// Save current state for undo before clearing
+		if (messages.length > 0) {
+			messageHistory = [...messageHistory, [...messages]];
+		}
 		messages = [];
 		sessionId = '';
 		status = 'idle';
 		errorMsg = '';
 		streamedText = '';
+		undoneHistory = [];
 		localStorage.removeItem(STORAGE_KEY);
 		if (isMobile) sidebarOpen = false;
 	}
@@ -288,6 +285,9 @@
 		status = 'idle';
 		errorMsg = '';
 		streamedText = '';
+		// Clear undo/redo when switching conversations to prevent cross-conversation data leaks
+		messageHistory = [];
+		undoneHistory = [];
 		await loadHistory(id);
 		if (isMobile) sidebarOpen = false;
 	}
@@ -332,20 +332,16 @@
 				</div>
 			</div>
 			<div class="header-right">
-				<div class="shortcuts-hint" title="Keyboard shortcuts">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-						<rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
-						<path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h8" />
+				<button class="icon-btn" onclick={handleUndo} disabled={!canUndo} title="Undo" aria-label="Undo">
+					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+						<polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
 					</svg>
-					<div class="shortcuts-tooltip">
-						<strong>⌨️ Shortcuts</strong>
-						<hr />
-						<span><kbd>Ctrl+Shift+D</kbd> Toggle dark mode</span>
-						<span><kbd>Ctrl+K</kbd> Focus message input</span>
-						<span><kbd>Ctrl+Shift+N</kbd> New conversation</span>
-						<span><kbd>Esc</kbd> Close sidebar (mobile)</span>
-					</div>
-				</div>
+				</button>
+				<button class="icon-btn" onclick={handleRedo} disabled={!canRedo} title="Redo" aria-label="Redo">
+					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+						<polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+					</svg>
+				</button>
 				<button class="icon-btn" onclick={toggleTheme} title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'} aria-label="Toggle dark mode">
 					{#if darkMode}
 						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -361,7 +357,7 @@
 						</svg>
 					{/if}
 				</button>
-				<button class="icon-btn new-chat-btn" onclick={handleNewChat} title="Start new conversation (Ctrl+Shift+N)" aria-label="Start new conversation">
+				<button class="icon-btn new-chat-btn" onclick={handleNewChat} title="New conversation" aria-label="New conversation">
 					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
 						<line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
 					</svg>
@@ -385,7 +381,7 @@
 
 	{#if sidebarOpen && isMobile}
 		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-		<div class="sidebar-overlay" onclick={toggleSidebar} onkeydown={(e) => e.key === 'Escape' && toggleSidebar()} role="presentation"></div>
+		<div class="sidebar-overlay" onclick={toggleSidebar} role="presentation"></div>
 	{/if}
 </div>
 
@@ -473,73 +469,11 @@
 		position: relative;
 	}
 
-	/* Shortcuts hint icon with tooltip */
-	.shortcuts-hint {
-		position: relative;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 30px;
-		height: 30px;
-		border-radius: var(--radius-md);
-		cursor: pointer;
-		opacity: 0.7;
-		transition: opacity var(--transition-fast);
-	}
-
-	.shortcuts-hint:hover {
-		opacity: 1;
-	}
-
-	.shortcuts-tooltip {
-		position: absolute;
-		top: 100%;
-		right: 0;
-		margin-top: 0.5rem;
-		background: var(--color-surface);
-		color: var(--color-text);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		padding: 0.75rem 1rem;
-		font-size: 0.75rem;
-		white-space: nowrap;
-		z-index: 50;
-		box-shadow: var(--shadow-lg);
-		min-width: 200px;
-		display: flex;
-		flex-direction: column;
-		gap: 0.35rem;
-		pointer-events: none;
-		opacity: 0;
-		transform: translateY(-4px);
-		transition: all var(--transition-fast);
-	}
-
-	.shortcuts-hint:hover .shortcuts-tooltip {
-		opacity: 1;
-		transform: translateY(0);
-		pointer-events: auto;
-	}
-
-	.shortcuts-tooltip strong {
-		font-size: 0.8rem;
-		color: var(--color-primary);
-	}
-
-	.shortcuts-tooltip hr {
-		border: none;
-		border-top: 1px solid var(--color-border);
-		margin: 0.25rem 0;
-	}
-
-	.shortcuts-tooltip kbd {
-		background: var(--color-border-light);
-		border: 1px solid var(--color-border);
-		border-radius: 3px;
-		padding: 0.1rem 0.4rem;
-		font-size: 0.65rem;
-		font-family: var(--font-mono, monospace);
-		margin-right: 0.4rem;
+	/* Undo / Redo disabled state */
+	.icon-btn:disabled {
+		opacity: 0.35;
+		cursor: not-allowed;
+		transform: none !important;
 	}
 
 	.icon-btn {
@@ -626,9 +560,6 @@
 			z-index: 15;
 		}
 
-		.shortcuts-tooltip {
-			right: auto;
-			left: 0;
-		}
+
 	}
 </style>

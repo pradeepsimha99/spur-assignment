@@ -45,39 +45,24 @@
 		const d = new Date(date);
 		const now = new Date();
 		const diffMs = now.getTime() - d.getTime();
-		const diffMin = Math.floor(diffMs / (1000 * 60));
+		const seconds = Math.floor(diffMs / 1000);
+		const minutes = Math.floor(seconds / 60);
+		const hours = Math.floor(minutes / 60);
+		const days = Math.floor(hours / 24);
+		const months = Math.floor(days / 30);
+		const years = Math.floor(days / 365);
 
-		// Less than 1 minute
-		if (diffMin < 1) return 'Just now';
-
-		// Less than 60 minutes — relative "Xm ago"
-		if (diffMin < 60) return `${diffMin}m ago`;
-
-		// Calendar-day offset (uses Math.round for DST safety)
-		const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-		const msgDateStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-		const calendarDaysAgo = Math.round((todayStart.getTime() - msgDateStart.getTime()) / (1000 * 60 * 60 * 24));
-
-		const timeStr = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-
-		// Same day — just the time
-		if (calendarDaysAgo === 0) return timeStr;
-
-		// Yesterday
-		if (calendarDaysAgo === 1) return `Yesterday ${timeStr}`;
-
-		// This week — day name + time
-		if (calendarDaysAgo < 7) {
-			return d.toLocaleDateString(undefined, { weekday: 'short' }) + ' ' + timeStr;
-		}
-
-		// This year — month + day + time
-		if (d.getFullYear() === now.getFullYear()) {
-			return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ', ' + timeStr;
-		}
-
-		// Older — full date + time
-		return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + ', ' + timeStr;
+		if (seconds < 60) return 'Just now';
+		if (minutes === 1) return '1 min ago';
+		if (minutes < 60) return `${minutes} mins ago`;
+		if (hours === 1) return '1 hour ago';
+		if (hours < 24) return `${hours} hours ago`;
+		if (days === 1) return '1 day ago';
+		if (days < 30) return `${days} days ago`;
+		if (months === 1) return '1 month ago';
+		if (months < 12) return `${months} months ago`;
+		if (years === 1) return '1 year ago';
+		return `${years} years ago`;
 	}
 
 	function formatDateSeparator(date: Date): string {

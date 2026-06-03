@@ -15,22 +15,47 @@
 		onNewChat: () => void;
 	} = $props();
 
+	let searchQuery = $state('');
+	let searchRef: HTMLInputElement | undefined = $state();
+
+	let filteredConversations = $derived.by(() => {
+		if (!searchQuery.trim()) return conversations;
+		const query = searchQuery.toLowerCase();
+		return conversations.filter((c) => c.preview.toLowerCase().includes(query));
+	});
+
 	function formatDate(dateStr: string): string {
 		const d = new Date(dateStr);
 		const now = new Date();
 		const diffMs = now.getTime() - d.getTime();
-		const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+		const seconds = Math.floor(diffMs / 1000);
+		const minutes = Math.floor(seconds / 60);
+		const hours = Math.floor(minutes / 60);
+		const days = Math.floor(hours / 24);
+		const months = Math.floor(days / 30);
+		const years = Math.floor(days / 365);
 
-		if (diffHours < 1) return 'Just now';
-		if (diffHours < 24) return `${diffHours}h ago`;
-		if (diffHours < 48) return 'Yesterday';
-		if (diffHours < 168) return `${Math.floor(diffHours / 24)}d ago`;
-		return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+		if (seconds < 60) return 'Just now';
+		if (minutes === 1) return '1 min ago';
+		if (minutes < 60) return `${minutes} mins ago`;
+		if (hours === 1) return '1 hour ago';
+		if (hours < 24) return `${hours} hours ago`;
+		if (days === 1) return '1 day ago';
+		if (days < 30) return `${days} days ago`;
+		if (months === 1) return '1 month ago';
+		if (months < 12) return `${months} months ago`;
+		if (years === 1) return '1 year ago';
+		return `${years} years ago`;
 	}
 
 	function truncatePreview(text: string, maxLen: number = 55): string {
 		if (text.length <= maxLen) return text;
 		return text.slice(0, maxLen) + '…';
+	}
+
+	function clearSearch() {
+		searchQuery = '';
+		if (searchRef) searchRef.focus();
 	}
 
 	// Generate skeleton items for loading state
@@ -55,6 +80,30 @@
 		</button>
 	</div>
 
+	<!-- Search bar -->
+	<div class="search-container">
+		<div class="search-wrapper">
+			<svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+				<circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+			</svg>
+			<input
+				bind:this={searchRef}
+				type="text"
+				bind:value={searchQuery}
+				placeholder="Search conversations..."
+				class="search-input"
+				aria-label="Search conversations"
+			/>
+			{#if searchQuery}
+				<button class="search-clear" onclick={clearSearch} aria-label="Clear search">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+						<line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+					</svg>
+				</button>
+			{/if}
+		</div>
+	</div>
+
 	<div class="conversation-list">
 		{#if loading}
 			<!-- Skeleton Loading -->
@@ -67,18 +116,18 @@
 					</div>
 				</div>
 			{/each}
-		{:else if conversations.length === 0}
+		{:else if filteredConversations.length === 0}
 			<div class="empty-state">
 				<div class="empty-icon-wrapper">
 					<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
 						<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
 					</svg>
 				</div>
-				<span class="empty-title">No conversations yet</span>
-				<span class="empty-hint">Start a new chat to begin</span>
+				<span class="empty-title">{searchQuery ? 'No matching conversations' : 'No conversations yet'}</span>
+				<span class="empty-hint">{searchQuery ? 'Try a different search term' : 'Start a new chat to begin'}</span>
 			</div>
 		{:else}
-			{#each conversations as conv (conv.id)}
+			{#each filteredConversations as conv (conv.id)}
 				<button
 					class="conversation-item"
 					class:active={conv.id === activeSessionId}
@@ -175,6 +224,67 @@
 		color: white;
 		transform: rotate(90deg);
 		box-shadow: var(--shadow-md);
+	}
+
+	/* ===== Search Bar ===== */
+	.search-container {
+		padding: 0.6rem 0.75rem 0.4rem;
+	}
+
+	.search-wrapper {
+		display: flex;
+		align-items: center;
+		background: var(--color-bg);
+		border: 1.5px solid var(--color-border);
+		border-radius: var(--radius-md);
+		padding: 0.35rem 0.6rem;
+		transition: all var(--transition-fast);
+	}
+
+	.search-wrapper:focus-within {
+		border-color: var(--color-primary);
+		box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+	}
+
+	.search-icon {
+		flex-shrink: 0;
+		color: var(--color-text-muted);
+	}
+
+	.search-input {
+		flex: 1;
+		border: none;
+		background: transparent;
+		padding: 0.25rem 0.4rem;
+		font-size: 0.8rem;
+		font-family: inherit;
+		color: var(--color-text);
+		outline: none;
+		min-width: 0;
+	}
+
+	.search-input::placeholder {
+		color: var(--color-text-muted);
+		font-size: 0.78rem;
+	}
+
+	.search-clear {
+		flex-shrink: 0;
+		background: none;
+		border: none;
+		color: var(--color-text-muted);
+		cursor: pointer;
+		padding: 2px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: var(--radius-sm);
+		transition: all var(--transition-fast);
+	}
+
+	.search-clear:hover {
+		color: var(--color-text);
+		background: var(--color-surface-hover);
 	}
 
 	.conversation-list {
