@@ -83,7 +83,7 @@ function startKeepAlive() {
       }
     } catch (err) {
       // Silently fail — keep-alive is best-effort
-      console.warn(`[KeepAlive] Ping failed (expected during first few seconds): ${err instanceof Error ? err.message : err}`);
+      console.debug(`[KeepAlive] Ping failed: ${err instanceof Error ? err.message : err}`);
     }
   }, KEEPALIVE_INTERVAL);
 }

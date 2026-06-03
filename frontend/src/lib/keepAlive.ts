@@ -43,10 +43,14 @@ export function stopKeepAlive(): void {
   console.log('[KeepAlive] Stopped');
 }
 
+let isPinging = false;
+
 /**
  * Ping the backend health endpoint.
  */
 async function pingBackend(): Promise<void> {
+  if (isPinging) return;
+  isPinging = true;
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
@@ -66,6 +70,8 @@ async function pingBackend(): Promise<void> {
   } catch {
     // Silently fail — keep-alive is best-effort
     // The backend may still be waking up from sleep
+  } finally {
+    isPinging = false;
   }
 }
 

@@ -261,10 +261,6 @@
 		transform: translateY(0);
 	}
 
-	.scroll-badge {
-		font-size: 0.7rem;
-	}
-
 	/* ===== Date Separator ===== */
 	.date-separator {
 		display: flex;
