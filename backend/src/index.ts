@@ -16,7 +16,7 @@ app.set('trust proxy', 1);
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3001',
-  'https://spur-assignment.vercel.app',
+  'https://spur-assignment-sable.vercel.app',
 ];
 if (process.env.FRONTEND_URL) {
   // Add the configured FRONTEND_URL (with and without trailing slash)
