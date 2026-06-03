@@ -6,7 +6,7 @@ services:
   - type: web
     name: spur-assignment-backend
     runtime: node
-    repo: https://github.com/your-username/spur-assignment
+    repo: https://github.com/pradeepsimha99/spur-assignment
     branch: main
     rootDir: backend
     buildCommand: npm install && npx prisma generate && npm run build
