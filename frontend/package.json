@@ -17,6 +17,9 @@
     "svelte": "^5.1.0",
     "vite": "^6.0.0"
   },
+  "engines": {
+    "node": "20.x"
+  },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/svelte": "^5.3.1",
