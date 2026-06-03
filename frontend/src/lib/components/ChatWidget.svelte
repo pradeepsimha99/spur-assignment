@@ -7,6 +7,7 @@
 	import type { Message, ChatStatus, ConversationSummary } from '$lib/types';
 
 	const STORAGE_KEY = 'spur-chat-session';
+	const THEME_KEY = 'spur-chat-theme';
 
 	let messages = $state<Message[]>([]);
 	let sessionId = $state<string>('');
@@ -17,11 +18,30 @@
 	let conversationsLoading = $state<boolean>(false);
 	let sidebarOpen = $state<boolean>(true);
 	let isMobile = $state(false);
+	let darkMode = $state(false);
 
 	onMount(() => {
 		isMobile = window.innerWidth <= 768;
 		if (isMobile) sidebarOpen = false;
 
+		// Initialize theme
+		const savedTheme = localStorage.getItem(THEME_KEY);
+		if (savedTheme === 'dark') {
+			darkMode = true;
+			document.documentElement.classList.add('dark');
+		} else if (savedTheme === 'light') {
+			darkMode = false;
+			document.documentElement.classList.remove('dark');
+		} else {
+			// Respect system preference
+			const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+			darkMode = prefersDark;
+			if (prefersDark) {
+				document.documentElement.classList.add('dark');
+			}
+		}
+
+		// Restore session
 		const saved = localStorage.getItem(STORAGE_KEY);
 		if (saved) {
 			try {
@@ -44,6 +64,17 @@
 		window.addEventListener('resize', handleResize);
 		return () => window.removeEventListener('resize', handleResize);
 	});
+
+	function toggleTheme() {
+		darkMode = !darkMode;
+		if (darkMode) {
+			document.documentElement.classList.add('dark');
+			localStorage.setItem(THEME_KEY, 'dark');
+		} else {
+			document.documentElement.classList.remove('dark');
+			localStorage.setItem(THEME_KEY, 'light');
+		}
+	}
 
 	async function loadHistory(id: string) {
 		try {
@@ -96,7 +127,6 @@
 			timestamp: new Date()
 		};
 
-		// Create AI placeholder for streaming
 		const aiMsg: Message = {
 			id: generateId(),
 			sender: 'ai',
@@ -211,7 +241,7 @@
 	<div class="chat-widget">
 		<div class="chat-header">
 			<div class="header-left">
-				<button class="sidebar-toggle" onclick={toggleSidebar} title="Toggle conversations" aria-label="Toggle conversation list">
+				<button class="icon-btn" onclick={toggleSidebar} title="Toggle conversations" aria-label="Toggle conversation list">
 					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
 						<line x1="3" y1="6" x2="21" y2="6" />
 						<line x1="3" y1="12" x2="21" y2="12" />
@@ -232,7 +262,22 @@
 				</div>
 			</div>
 			<div class="header-right">
-				<button class="new-chat-btn" onclick={handleNewChat} title="Start new conversation" aria-label="Start new conversation">
+				<button class="icon-btn" onclick={toggleTheme} title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'} aria-label="Toggle dark mode">
+					{#if darkMode}
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+							<circle cx="12" cy="12" r="5" />
+							<line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
+							<line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+							<line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
+							<line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+						</svg>
+					{:else}
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+						</svg>
+					{/if}
+				</button>
+				<button class="icon-btn new-chat-btn" onclick={handleNewChat} title="Start new conversation" aria-label="Start new conversation">
 					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
 						<line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
 					</svg>
@@ -340,10 +385,10 @@
 	.header-right {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
+		gap: 0.35rem;
 	}
 
-	.sidebar-toggle {
+	.icon-btn {
 		background: rgba(255, 255, 255, 0.15);
 		border: none;
 		color: white;
@@ -358,28 +403,16 @@
 		backdrop-filter: blur(4px);
 	}
 
-	.sidebar-toggle:hover {
+	.icon-btn:hover {
 		background: rgba(255, 255, 255, 0.25);
 		transform: scale(1.05);
 	}
 
 	.new-chat-btn {
-		background: rgba(255, 255, 255, 0.15);
-		border: none;
-		color: white;
-		width: 34px;
-		height: 34px;
 		border-radius: 50%;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		cursor: pointer;
-		transition: all var(--transition-fast);
-		backdrop-filter: blur(4px);
 	}
 
 	.new-chat-btn:hover {
-		background: rgba(255, 255, 255, 0.25);
 		transform: rotate(90deg) scale(1.05);
 	}
 
@@ -397,6 +430,10 @@
 
 	.error-bar svg {
 		flex-shrink: 0;
+	}
+
+	:global(.dark) .error-bar {
+		border-top-color: #7f1d1d;
 	}
 
 	.sidebar-overlay {

@@ -14,7 +14,6 @@
 	} = $props();
 
 	let messagesContainer: HTMLDivElement | undefined = $state();
-	let isInitialLoad = $state(true);
 
 	$effect(() => {
 		if (messages.length || isTyping || isStreaming) {
@@ -23,13 +22,6 @@
 					messagesContainer.scrollTop = messagesContainer.scrollHeight;
 				}
 			});
-		}
-	});
-
-	$effect(() => {
-		if (messages.length > 0 && isInitialLoad) {
-			const timer = setTimeout(() => isInitialLoad = false, 500);
-			return () => clearTimeout(timer);
 		}
 	});
 
@@ -44,12 +36,33 @@
 		return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 	}
 
-	// Check if the last message is from AI and streaming is active
+	function formatDateSeparator(date: Date): string {
+		const d = new Date(date);
+		const now = new Date();
+		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+		const yesterday = new Date(today);
+		yesterday.setDate(yesterday.getDate() - 1);
+		const msgDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+		if (msgDate.getTime() === today.getTime()) return 'Today';
+		if (msgDate.getTime() === yesterday.getTime()) return 'Yesterday';
+		if (now.getTime() - msgDate.getTime() < 7 * 24 * 60 * 60 * 1000) {
+			return d.toLocaleDateString([], { weekday: 'long' });
+		}
+		return d.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
+	}
+
+	function isNewDay(current: Date, previous: Date | null): boolean {
+		if (!previous) return true;
+		const cur = new Date(current.getFullYear(), current.getMonth(), current.getDate());
+		const prev = new Date(previous.getFullYear(), previous.getMonth(), previous.getDate());
+		return cur.getTime() !== prev.getTime();
+	}
+
 	let lastMsgIsStreaming = $derived(
 		isStreaming && messages.length > 0 && messages[messages.length - 1].sender === 'ai'
 	);
 
-	// Get the last message which is the AI placeholder during streaming
 	let lastMessage = $derived(messages.length > 0 ? messages[messages.length - 1] : null);
 
 	function getMessageAnimationDelay(index: number, total: number): string {
@@ -57,7 +70,7 @@
 		return distanceFromEnd * 0.05 + 's';
 	}
 
-	// Static SVG icons for avatars (safe for @html since these are internal strings, not user input)
+	// Static SVG icons for avatars (safe for @html since these are internal strings)
 	const userIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
 	const aiIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 0 1 10 10c0 2.76-1.12 5.26-2.93 7.07L19 22l-2.93-1.93A10 10 0 1 1 12 2z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="9" y1="11" x2="15" y2="11"/></svg>';
 </script>
@@ -111,7 +124,19 @@
 			</div>
 		</div>
 	{:else}
-		{#each messages as message, i}
+		{#each messages as message, i (message.id)}
+			{@const msgDate = new Date(message.timestamp)}
+			{@const prevMsg = messages[i - 1]}
+			{@const showDateSep = !prevMsg || isNewDay(msgDate, new Date(prevMsg.timestamp))}
+
+			{#if showDateSep}
+				<div class="date-separator">
+					<span class="date-separator-line"></span>
+					<span class="date-separator-text">{formatDateSeparator(msgDate)}</span>
+					<span class="date-separator-line"></span>
+				</div>
+			{/if}
+
 			<div
 				class="message-wrapper {message.sender}"
 				class:user={message.sender === 'user'}
@@ -134,7 +159,7 @@
 						{/if}
 					</div>
 					{#if message.text || (!lastMsgIsStreaming || message !== lastMessage)}
-						<div class="message-time">{formatTime(message.timestamp)}</div>
+						<div class="message-time" title={msgDate.toLocaleString()}>{formatTime(msgDate)}</div>
 					{/if}
 				</div>
 			</div>
@@ -162,11 +187,39 @@
 		padding: 1.25rem 1.5rem;
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
+		gap: 0.5rem;
 		scroll-behavior: smooth;
 		background: var(--color-bg);
 	}
 
+	/* ===== Date Separator ===== */
+	.date-separator {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.75rem 0 0.5rem;
+		animation: fadeIn 0.4s ease;
+	}
+
+	.date-separator:first-child {
+		padding-top: 0;
+	}
+
+	.date-separator-line {
+		flex: 1;
+		height: 1px;
+		background: var(--color-border);
+	}
+
+	.date-separator-text {
+		font-size: 0.7rem;
+		font-weight: 500;
+		color: var(--color-text-muted);
+		white-space: nowrap;
+		letter-spacing: 0.02em;
+	}
+
+	/* ===== Empty State ===== */
 	.empty-state {
 		display: flex;
 		flex-direction: column;
@@ -257,6 +310,7 @@
 		flex-shrink: 0;
 	}
 
+	/* ===== Messages ===== */
 	.message-wrapper {
 		display: flex;
 		gap: 0.65rem;
@@ -370,6 +424,7 @@
 		color: var(--color-text-muted);
 	}
 
+	/* ===== Typing ===== */
 	.typing-bubble {
 		padding: 0.9rem 1.1rem;
 		min-width: 56px;
