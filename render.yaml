@@ -1,0 +1,44 @@
+# Render Blueprint — Backend-only deployment (frontend deploys to Vercel via vercel.json)
+# https://render.com/docs/blueprint-spec
+
+services:
+  # Backend API — deploy to Render
+  - type: web
+    name: spur-assignment-backend
+    runtime: node
+    repo: https://github.com/your-username/spur-assignment
+    branch: main
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && node dist/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: spur-assignment-db
+          property: connectionString
+      - key: GROQ_API_KEY
+        sync: false  # Set manually in Render dashboard (Get at https://console.groq.com/keys)
+      - key: GROQ_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: LLM_MAX_TOKENS
+        value: "500"
+      - key: LLM_MAX_MESSAGES
+        value: "20"
+      - key: LLM_TEMPERATURE
+        value: "0.7"
+      - key: REDIS_ENABLED
+        value: "false"
+      - key: FRONTEND_URL
+        value: https://your-frontend.vercel.app  # 👈 Update after Vercel deployment
+
+databases:
+  - name: spur-assignment-db
+    databaseName: spur_chat
+    plan: free
