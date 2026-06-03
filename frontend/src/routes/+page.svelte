@@ -11,7 +11,7 @@
 		display: flex;
 		flex-direction: column;
 		min-height: 100vh;
-		background: #f1f5f9;
+		background: var(--color-bg);
 	}
 
 	:global(body) {

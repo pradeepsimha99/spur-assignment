@@ -14,8 +14,8 @@
 	} = $props();
 
 	let messagesContainer: HTMLDivElement | undefined = $state();
+	let isInitialLoad = $state(true);
 
-	// Auto-scroll to bottom when new messages arrive or typing state changes
 	$effect(() => {
 		if (messages.length || isTyping || isStreaming) {
 			requestAnimationFrame(() => {
@@ -26,15 +26,40 @@
 		}
 	});
 
+	$effect(() => {
+		if (messages.length > 0 && isInitialLoad) {
+			const timer = setTimeout(() => isInitialLoad = false, 500);
+			return () => clearTimeout(timer);
+		}
+	});
+
 	function formatTime(date: Date): string {
 		const d = new Date(date);
+		const now = new Date();
+		const diffMs = now.getTime() - d.getTime();
+		const diffMin = Math.floor(diffMs / (1000 * 60));
+
+		if (diffMin < 1) return 'Just now';
+		if (diffMin < 60) return diffMin + 'm ago';
 		return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 	}
 
-	// Check if the last message is a streaming (empty-text) AI message
+	// Check if the last message is from AI and streaming is active
 	let lastMsgIsStreaming = $derived(
 		isStreaming && messages.length > 0 && messages[messages.length - 1].sender === 'ai'
 	);
+
+	// Get the last message which is the AI placeholder during streaming
+	let lastMessage = $derived(messages.length > 0 ? messages[messages.length - 1] : null);
+
+	function getMessageAnimationDelay(index: number, total: number): string {
+		const distanceFromEnd = total - 1 - index;
+		return distanceFromEnd * 0.05 + 's';
+	}
+
+	// Static SVG icons for avatars (safe for @html since these are internal strings, not user input)
+	const userIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+	const aiIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 0 1 10 10c0 2.76-1.12 5.26-2.93 7.07L19 22l-2.93-1.93A10 10 0 1 1 12 2z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="9" y1="11" x2="15" y2="11"/></svg>';
 </script>
 
 <div
@@ -44,58 +69,89 @@
 	aria-live="polite"
 	aria-label="Chat messages"
 >
-	{#if messages.length === 0}
+	{#if messages.length === 0 && !isTyping}
 		<div class="empty-state">
-			<div class="empty-icon">💬</div>
-			<h2>Welcome to Spur Support</h2>
-			<p>Ask me about shipping, returns, or anything else about our store!</p>
+			<div class="empty-icon-container">
+				<div class="empty-icon-glow"></div>
+				<div class="empty-icon">✨</div>
+			</div>
+			<h2 class="empty-heading">Welcome to Spur Support</h2>
+			<p class="empty-description">
+				I'm your AI assistant. Ask me about shipping, returns, products, or anything about our store!
+			</p>
 			<div class="suggestions">
-				<button class="suggestion-chip" onclick={() => window.dispatchEvent(new CustomEvent('suggest-message', { detail: "What's your return policy?" }))}>
-					What's your return policy?
+				<button
+					class="suggestion-chip"
+					onclick={() => window.dispatchEvent(new CustomEvent('suggest-message', { detail: "What's your return policy?" }))}
+				>
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+					</svg>
+					Return policy
 				</button>
-				<button class="suggestion-chip" onclick={() => window.dispatchEvent(new CustomEvent('suggest-message', { detail: 'Do you ship to USA?' }))}>
-					Do you ship to USA?
+				<button
+					class="suggestion-chip"
+					onclick={() => window.dispatchEvent(new CustomEvent('suggest-message', { detail: 'Do you ship internationally?' }))}
+				>
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" />
+						<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+					</svg>
+					International shipping
 				</button>
-				<button class="suggestion-chip" onclick={() => window.dispatchEvent(new CustomEvent('suggest-message', { detail: 'What are your support hours?' }))}>
-					What are your support hours?
+				<button
+					class="suggestion-chip"
+					onclick={() => window.dispatchEvent(new CustomEvent('suggest-message', { detail: 'What are your support hours?' }))}
+				>
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+					</svg>
+					Support hours
 				</button>
 			</div>
 		</div>
 	{:else}
-		{#each messages as message (message.id)}
+		{#each messages as message, i}
 			<div
 				class="message-wrapper {message.sender}"
 				class:user={message.sender === 'user'}
 				class:ai={message.sender === 'ai'}
+				style="animation-delay: {getMessageAnimationDelay(i, messages.length)}"
 			>
-				<div class="avatar">
-					{message.sender === 'user' ? '👤' : '🤖'}
+				<div class="avatar" class:user-avatar={message.sender === 'user'} class:ai-avatar={message.sender === 'ai'}>
+					{#if message.sender === 'user'}
+						{@html userIcon}
+					{:else}
+						{@html aiIcon}
+					{/if}
 				</div>
-				<div class="message-bubble">
-					<div class="message-sender">
-						{message.sender === 'user' ? 'You' : 'Spur AI'}
-					</div>
+				<div class="message-bubble" class:user-bubble={message.sender === 'user'} class:ai-bubble={message.sender === 'ai'}>
+					<div class="message-sender">{message.sender === 'user' ? 'You' : 'Spur AI'}</div>
 					<div class="message-text">
 						{message.text}
-						{#if lastMsgIsStreaming && message === messages[messages.length - 1] && streamedText}
+						{#if lastMsgIsStreaming && message === lastMessage && !streamedText}
 							<span class="streaming-cursor">|</span>
 						{/if}
 					</div>
-					<div class="message-time">{formatTime(message.timestamp)}</div>
+					{#if message.text || (!lastMsgIsStreaming || message !== lastMessage)}
+						<div class="message-time">{formatTime(message.timestamp)}</div>
+					{/if}
 				</div>
 			</div>
 		{/each}
-	{/if}
 
-	{#if isTyping}
-		<div class="message-wrapper ai">
-			<div class="avatar">🤖</div>
-			<div class="message-bubble typing-bubble">
-				<div class="typing-indicator">
-					<span></span><span></span><span></span>
+		{#if isTyping}
+			<div class="message-wrapper ai" style="animation-delay: 0s">
+				<div class="avatar ai-avatar">
+					{@html aiIcon}
+				</div>
+				<div class="message-bubble ai-bubble typing-bubble">
+					<div class="typing-indicator">
+						<span></span><span></span><span></span>
+					</div>
 				</div>
 			</div>
-		</div>
+		{/if}
 	{/if}
 </div>
 
@@ -103,12 +159,12 @@
 	.messages-container {
 		flex: 1;
 		overflow-y: auto;
-		padding: 1.25rem;
+		padding: 1.25rem 1.5rem;
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: 0.75rem;
 		scroll-behavior: smooth;
-		background: #f8fafc;
+		background: var(--color-bg);
 	}
 
 	.empty-state {
@@ -119,26 +175,46 @@
 		height: 100%;
 		text-align: center;
 		padding: 2rem;
-		gap: 0.75rem;
+		gap: 0.5rem;
+		animation: fadeIn 0.6s ease;
+	}
+
+	.empty-icon-container {
+		position: relative;
+		margin-bottom: 0.75rem;
+	}
+
+	.empty-icon-glow {
+		position: absolute;
+		inset: -12px;
+		background: radial-gradient(circle, rgba(99, 102, 241, 0.2), transparent 70%);
+		border-radius: 50%;
+		animation: pulse 3s ease-in-out infinite;
 	}
 
 	.empty-icon {
 		font-size: 3rem;
-		margin-bottom: 0.25rem;
+		position: relative;
+		animation: float 3s ease-in-out infinite;
 	}
 
-	.empty-state h2 {
+	.empty-heading {
 		margin: 0;
-		font-size: 1.25rem;
-		font-weight: 600;
-		color: #1e293b;
+		font-size: 1.3rem;
+		font-weight: 700;
+		color: var(--color-text);
+		background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+		-webkit-background-clip: text;
+		-webkit-text-fill-color: transparent;
+		background-clip: text;
 	}
 
-	.empty-state p {
+	.empty-description {
 		margin: 0;
-		color: #64748b;
-		font-size: 0.9rem;
-		max-width: 320px;
+		color: var(--color-text-muted);
+		font-size: 0.875rem;
+		max-width: 340px;
+		line-height: 1.5;
 	}
 
 	.suggestions {
@@ -146,49 +222,47 @@
 		flex-wrap: wrap;
 		gap: 0.5rem;
 		justify-content: center;
-		margin-top: 0.75rem;
+		margin-top: 1rem;
 	}
 
 	.suggestion-chip {
-		background: white;
-		border: 1px solid #e2e8f0;
-		border-radius: 1rem;
-		padding: 0.5rem 1rem;
-		font-size: 0.8rem;
-		color: #3b82f6;
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		background: var(--color-surface);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-full);
+		padding: 0.55rem 1rem;
+		font-size: 0.78rem;
+		color: var(--color-text-secondary);
 		cursor: pointer;
-		transition: all 0.2s ease;
+		transition: all var(--transition-fast);
 		font-family: inherit;
+		box-shadow: var(--shadow-sm);
 	}
 
 	.suggestion-chip:hover {
-		background: #eff6ff;
-		border-color: #3b82f6;
-		transform: translateY(-1px);
-		box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+		border-color: var(--color-primary-light);
+		color: var(--color-primary);
+		background: var(--color-primary-bg);
+		transform: translateY(-2px);
+		box-shadow: var(--shadow-md);
 	}
 
 	.suggestion-chip:active {
 		transform: translateY(0);
 	}
 
-	.message-wrapper {
-		display: flex;
-		gap: 0.75rem;
-		align-items: flex-start;
-		max-width: 85%;
-		animation: fadeIn 0.3s ease;
+	.suggestion-chip svg {
+		flex-shrink: 0;
 	}
 
-	@keyframes fadeIn {
-		from {
-			opacity: 0;
-			transform: translateY(8px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
+	.message-wrapper {
+		display: flex;
+		gap: 0.65rem;
+		align-items: flex-start;
+		max-width: 82%;
+		animation: fadeInUp 0.35s ease both;
 	}
 
 	.message-wrapper.user {
@@ -201,66 +275,80 @@
 	}
 
 	.avatar {
-		width: 36px;
-		height: 36px;
-		border-radius: 50%;
+		width: 34px;
+		height: 34px;
+		border-radius: var(--radius-md);
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-size: 1.1rem;
 		flex-shrink: 0;
+		transition: all var(--transition-fast);
 	}
 
-	.message-wrapper.user .avatar {
-		background: #dbeafe;
+	.avatar.user-avatar {
+		background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+		color: white;
+		box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
 	}
 
-	.message-wrapper.ai .avatar {
-		background: #e0e7ff;
+	.avatar.ai-avatar {
+		background: linear-gradient(135deg, #8b5cf6, #6366f1);
+		color: white;
+		box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
 	}
 
 	.message-bubble {
-		padding: 0.75rem 1rem;
-		border-radius: 1rem;
+		padding: 0.65rem 0.9rem;
+		border-radius: var(--radius-lg);
 		position: relative;
-		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+		transition: all var(--transition-fast);
 	}
 
-	.message-wrapper.user .message-bubble {
-		background: #3b82f6;
+	.message-wrapper.user .message-bubble.user-bubble {
+		background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
 		color: white;
-		border-bottom-right-radius: 0.25rem;
+		border-bottom-right-radius: var(--radius-sm);
+		box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
 	}
 
-	.message-wrapper.ai .message-bubble {
-		background: white;
-		color: #1e293b;
-		border: 1px solid #e2e8f0;
-		border-bottom-left-radius: 0.25rem;
+	.message-wrapper.ai .message-bubble.ai-bubble {
+		background: var(--color-surface);
+		color: var(--color-text);
+		border: 1px solid var(--color-border);
+		border-bottom-left-radius: var(--radius-sm);
+		box-shadow: var(--shadow-sm);
 	}
 
 	.message-sender {
-		font-size: 0.7rem;
+		font-size: 0.65rem;
 		font-weight: 600;
 		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		margin-bottom: 0.25rem;
-		opacity: 0.7;
+		letter-spacing: 0.06em;
+		margin-bottom: 0.2rem;
+	}
+
+	.message-wrapper.user .message-sender {
+		color: rgba(255, 255, 255, 0.75);
+	}
+
+	.message-wrapper.ai .message-sender {
+		color: var(--color-primary);
 	}
 
 	.message-text {
-		font-size: 0.925rem;
-		line-height: 1.5;
+		font-size: 0.9rem;
+		line-height: 1.55;
 		white-space: pre-wrap;
 		word-wrap: break-word;
 	}
 
 	.streaming-cursor {
 		display: inline-block;
-		font-weight: bold;
-		color: #3b82f6;
-		animation: blink 0.8s step-end infinite;
+		font-weight: 400;
+		color: var(--color-primary);
+		animation: blink 0.7s step-end infinite;
 		margin-left: 1px;
+		font-size: 1.1rem;
 	}
 
 	@keyframes blink {
@@ -269,16 +357,22 @@
 	}
 
 	.message-time {
-		font-size: 0.65rem;
-		margin-top: 0.35rem;
-		opacity: 0.6;
-		text-align: right;
+		font-size: 0.62rem;
+		margin-top: 0.3rem;
+		font-weight: 400;
 	}
 
-	/* Typing indicator */
+	.message-wrapper.user .message-time {
+		color: rgba(255, 255, 255, 0.55);
+	}
+
+	.message-wrapper.ai .message-time {
+		color: var(--color-text-muted);
+	}
+
 	.typing-bubble {
-		padding: 1rem 1.25rem;
-		min-width: 60px;
+		padding: 0.9rem 1.1rem;
+		min-width: 56px;
 	}
 
 	.typing-indicator {
@@ -289,10 +383,10 @@
 	}
 
 	.typing-indicator span {
-		width: 8px;
-		height: 8px;
+		width: 7px;
+		height: 7px;
 		border-radius: 50%;
-		background: #94a3b8;
+		background: var(--color-text-muted);
 		display: inline-block;
 		animation: typing 1.4s infinite ease-in-out;
 	}
@@ -308,10 +402,10 @@
 	@keyframes typing {
 		0%, 60%, 100% {
 			transform: translateY(0);
-			opacity: 0.4;
+			opacity: 0.3;
 		}
 		30% {
-			transform: translateY(-6px);
+			transform: translateY(-5px);
 			opacity: 1;
 		}
 	}

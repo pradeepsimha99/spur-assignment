@@ -6,7 +6,6 @@
 	import { sendMessage, sendMessageStream, fetchMessages, listConversations } from '$lib/api';
 	import type { Message, ChatStatus, ConversationSummary } from '$lib/types';
 
-	// Try to restore session from localStorage
 	const STORAGE_KEY = 'spur-chat-session';
 
 	let messages = $state<Message[]>([]);
@@ -17,9 +16,12 @@
 	let conversations = $state<ConversationSummary[]>([]);
 	let conversationsLoading = $state<boolean>(false);
 	let sidebarOpen = $state<boolean>(true);
+	let isMobile = $state(false);
 
 	onMount(() => {
-		// Restore session on load
+		isMobile = window.innerWidth <= 768;
+		if (isMobile) sidebarOpen = false;
+
 		const saved = localStorage.getItem(STORAGE_KEY);
 		if (saved) {
 			try {
@@ -33,8 +35,14 @@
 			}
 		}
 
-		// Load conversation list in background
 		refreshConversations();
+
+		const handleResize = () => {
+			isMobile = window.innerWidth <= 768;
+			if (!isMobile) sidebarOpen = true;
+		};
+		window.addEventListener('resize', handleResize);
+		return () => window.removeEventListener('resize', handleResize);
 	});
 
 	async function loadHistory(id: string) {
@@ -45,7 +53,6 @@
 				timestamp: new Date(m.timestamp)
 			}));
 		} catch {
-			// If session expired or invalid, start fresh
 			sessionId = '';
 			localStorage.removeItem(STORAGE_KEY);
 		}
@@ -57,13 +64,12 @@
 			const data = await listConversations();
 			conversations = data.conversations;
 		} catch {
-			// Silently fail — conversations are non-critical
+			// Silently fail
 		} finally {
 			conversationsLoading = false;
 		}
 	}
 
-	// Listen for suggestion chip clicks
 	function handleSuggestMessage(e: Event) {
 		const detail = (e as CustomEvent).detail;
 		if (typeof detail === 'string') {
@@ -81,33 +87,31 @@
 	}
 
 	async function handleSend(text: string) {
-		// Optimistically add user message
+		if (isMobile) sidebarOpen = false;
+
 		const userMsg: Message = {
 			id: generateId(),
 			sender: 'user',
 			text,
 			timestamp: new Date()
 		};
-		messages = [...messages, userMsg];
-		status = 'sending';
-		errorMsg = '';
-		streamedText = '';
 
-		// Create a placeholder AI message for streaming
-		const aiMsgId = generateId();
+		// Create AI placeholder for streaming
 		const aiMsg: Message = {
-			id: aiMsgId,
+			id: generateId(),
 			sender: 'ai',
 			text: '',
 			timestamp: new Date()
 		};
-		messages = [...messages, aiMsg];
 
-		// Generate idempotency key for this message
+		messages = [...messages, userMsg, aiMsg];
+		status = 'sending';
+		errorMsg = '';
+		streamedText = '';
+
 		const idempotencyKey = crypto.randomUUID();
 
 		try {
-			// Try streaming first
 			status = 'streaming';
 
 			const result = await sendMessageStream(
@@ -116,7 +120,7 @@
 				(accumulated: string) => {
 					streamedText = accumulated;
 					messages = messages.map((m) =>
-						m.id === aiMsgId ? { ...m, text: accumulated } : m
+						m.id === aiMsg.id ? { ...m, text: accumulated } : m
 					);
 				},
 				(err: string) => {
@@ -125,56 +129,43 @@
 				idempotencyKey
 			);
 
-			// Update session
 			sessionId = result.sessionId;
 			localStorage.setItem(STORAGE_KEY, JSON.stringify({ sessionId }));
 
-			// Finalize the AI message with the full reply
 			messages = messages.map((m) =>
-				m.id === aiMsgId ? { ...m, text: result.reply, timestamp: new Date() } : m
+				m.id === aiMsg.id ? { ...m, text: result.reply, timestamp: new Date() } : m
 			);
 			streamedText = '';
 			status = 'idle';
-
-			// Refresh conversation list
 			refreshConversations();
 		} catch (err) {
-			// If streaming fails, fall back to non-streaming
 			try {
 				status = 'sending';
-				const response = await sendMessage(
-					text,
-					sessionId || undefined,
-					idempotencyKey
-				);
+				const response = await sendMessage(text, sessionId || undefined, idempotencyKey);
 
 				sessionId = response.sessionId;
 				localStorage.setItem(STORAGE_KEY, JSON.stringify({ sessionId }));
 
 				messages = messages.map((m) =>
-					m.id === aiMsgId ? { ...m, text: response.reply, timestamp: new Date() } : m
+					m.id === aiMsg.id ? { ...m, text: response.reply, timestamp: new Date() } : m
 				);
 				streamedText = '';
 				status = 'idle';
-
-				// Refresh conversation list
 				refreshConversations();
 			} catch (fallbackErr) {
 				status = 'error';
 				const errorText = fallbackErr instanceof Error ? fallbackErr.message : 'Something went wrong. Please try again.';
 				errorMsg = errorText;
 
-				// Remove the placeholder AI message and the optimistically added user message
-				messages = messages.filter((m) => m.id !== aiMsgId && m.id !== userMsg.id);
+				messages = messages.filter((m) => m.id !== aiMsg.id && m.id !== userMsg.id);
 
-				// Add an error message in the chat
 				const errorMsgEntry: Message = {
 					id: generateId(),
 					sender: 'ai',
-					text: `❌ ${errorText}`,
+					text: '\u274C ' + errorText,
 					timestamp: new Date()
 				};
-				messages = [...messages, errorMsgEntry];
+				messages = [...messages, userMsg, errorMsgEntry];
 				streamedText = '';
 			}
 		}
@@ -187,16 +178,18 @@
 		errorMsg = '';
 		streamedText = '';
 		localStorage.removeItem(STORAGE_KEY);
+		if (isMobile) sidebarOpen = false;
 	}
 
 	async function handleSelectConversation(id: string) {
-		if (id === sessionId) return; // Already viewing this conversation
+		if (id === sessionId) return;
 		sessionId = id;
 		localStorage.setItem(STORAGE_KEY, JSON.stringify({ sessionId }));
 		status = 'idle';
 		errorMsg = '';
 		streamedText = '';
 		await loadHistory(id);
+		if (isMobile) sidebarOpen = false;
 	}
 
 	function toggleSidebar() {
@@ -205,7 +198,7 @@
 </script>
 
 <div class="app-layout">
-	<div class="sidebar-wrapper" class:hidden={!sidebarOpen}>
+	<div class="sidebar-wrapper" class:visible={sidebarOpen} class:hidden={!sidebarOpen}>
 		<ConversationList
 			conversations={conversations}
 			activeSessionId={sessionId}
@@ -220,45 +213,48 @@
 			<div class="header-left">
 				<button class="sidebar-toggle" onclick={toggleSidebar} title="Toggle conversations" aria-label="Toggle conversation list">
 					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-						<line x1="3" y1="6" x2="21" y2="6"></line>
-						<line x1="3" y1="12" x2="21" y2="12"></line>
-						<line x1="3" y1="18" x2="21" y2="18"></line>
+						<line x1="3" y1="6" x2="21" y2="6" />
+						<line x1="3" y1="12" x2="21" y2="12" />
+						<line x1="3" y1="18" x2="21" y2="18" />
 					</svg>
 				</button>
-				<div class="status-indicator" class:streaming={status === 'streaming'}></div>
-				<div>
+				<div class="header-info">
 					<div class="header-title">Spur Support</div>
 					<div class="header-subtitle">
-						{#if sessionId}
-							AI-powered support
+						{#if status === 'streaming'}
+							<span class="streaming-label">AI is typing...</span>
+						{:else if sessionId}
+							AI-powered customer support
 						{:else}
 							Start a new conversation
 						{/if}
 					</div>
 				</div>
 			</div>
-			<button class="new-chat-btn" onclick={handleNewChat} title="Start new conversation" aria-label="Start new conversation">
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-					<circle cx="12" cy="12" r="10"></circle>
-					<line x1="12" y1="8" x2="12" y2="16"></line>
-					<line x1="8" y1="12" x2="16" y2="12"></line>
-				</svg>
-			</button>
+			<div class="header-right">
+				<button class="new-chat-btn" onclick={handleNewChat} title="Start new conversation" aria-label="Start new conversation">
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+						<line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+					</svg>
+				</button>
+			</div>
 		</div>
 
 		<MessageList {messages} isTyping={status === 'sending'} isStreaming={status === 'streaming'} {streamedText} />
 
 		{#if errorMsg && status === 'error'}
 			<div class="error-bar">
-				<span>⚠️ {errorMsg}</span>
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+				</svg>
+				<span>{errorMsg}</span>
 			</div>
 		{/if}
 
 		<MessageInput disabled={status === 'sending' || status === 'streaming'} onSend={handleSend} />
 	</div>
 
-	<!-- Mobile sidebar overlay -->
-	{#if sidebarOpen}
+	{#if sidebarOpen && isMobile}
 		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 		<div class="sidebar-overlay" onclick={toggleSidebar} onkeydown={(e) => e.key === 'Escape' && toggleSidebar()} role="presentation"></div>
 	{/if}
@@ -268,13 +264,14 @@
 	.app-layout {
 		display: flex;
 		height: 100vh;
-		background: white;
+		background: var(--color-surface);
 		position: relative;
 	}
 
 	.sidebar-wrapper {
 		flex-shrink: 0;
 		z-index: 20;
+		transition: transform var(--transition-base), opacity var(--transition-base);
 	}
 
 	.sidebar-wrapper.hidden {
@@ -286,7 +283,7 @@
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
-		background: white;
+		background: var(--color-bg);
 	}
 
 	.chat-header {
@@ -294,9 +291,11 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 1rem 1.25rem;
-		background: linear-gradient(135deg, #1e40af, #3b82f6);
+		background: linear-gradient(135deg, #4f46e5, #6366f1, #818cf8);
+		background-size: 200% 200%;
+		animation: gradientShift 6s ease infinite;
 		color: white;
-		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 2px 12px rgba(79, 70, 229, 0.3);
 		z-index: 10;
 	}
 
@@ -306,41 +305,9 @@
 		gap: 0.75rem;
 	}
 
-	.sidebar-toggle {
-		background: rgba(255, 255, 255, 0.15);
-		border: none;
-		color: white;
-		width: 34px;
-		height: 34px;
-		border-radius: 0.5rem;
+	.header-info {
 		display: flex;
-		align-items: center;
-		justify-content: center;
-		cursor: pointer;
-		transition: all 0.2s ease;
-	}
-
-	.sidebar-toggle:hover {
-		background: rgba(255, 255, 255, 0.25);
-	}
-
-	.status-indicator {
-		width: 10px;
-		height: 10px;
-		border-radius: 50%;
-		background: #22c55e;
-		box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
-		animation: pulse 2s infinite;
-	}
-
-	.status-indicator.streaming {
-		background: #3b82f6;
-		box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
-	}
-
-	@keyframes pulse {
-		0%, 100% { opacity: 1; }
-		50% { opacity: 0.6; }
+		flex-direction: column;
 	}
 
 	.header-title {
@@ -350,40 +317,96 @@
 	}
 
 	.header-subtitle {
-		font-size: 0.75rem;
-		opacity: 0.85;
-		margin-top: 0.1rem;
+		font-size: 0.72rem;
+		opacity: 0.8;
+		margin-top: 0.05rem;
+	}
+
+	.streaming-label {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+	}
+
+	.streaming-label::after {
+		content: '';
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: #22d3ee;
+		animation: pulse 1.5s ease-in-out infinite;
+	}
+
+	.header-right {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.sidebar-toggle {
+		background: rgba(255, 255, 255, 0.15);
+		border: none;
+		color: white;
+		width: 34px;
+		height: 34px;
+		border-radius: var(--radius-md);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		transition: all var(--transition-fast);
+		backdrop-filter: blur(4px);
+	}
+
+	.sidebar-toggle:hover {
+		background: rgba(255, 255, 255, 0.25);
+		transform: scale(1.05);
 	}
 
 	.new-chat-btn {
 		background: rgba(255, 255, 255, 0.15);
 		border: none;
 		color: white;
-		width: 36px;
-		height: 36px;
+		width: 34px;
+		height: 34px;
 		border-radius: 50%;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		cursor: pointer;
-		transition: all 0.2s ease;
+		transition: all var(--transition-fast);
+		backdrop-filter: blur(4px);
 	}
 
 	.new-chat-btn:hover {
 		background: rgba(255, 255, 255, 0.25);
-		transform: rotate(90deg);
+		transform: rotate(90deg) scale(1.05);
 	}
 
 	.error-bar {
-		background: #fef2f2;
+		background: var(--color-error-bg);
 		border-top: 1px solid #fecaca;
-		padding: 0.5rem 1.25rem;
-		font-size: 0.8rem;
-		color: #dc2626;
+		padding: 0.55rem 1.25rem;
+		font-size: 0.78rem;
+		color: var(--color-error);
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		animation: fadeIn 0.2s ease;
+	}
+
+	.error-bar svg {
+		flex-shrink: 0;
 	}
 
 	.sidebar-overlay {
-		display: none;
+		display: block;
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.3);
+		z-index: 25;
+		backdrop-filter: blur(2px);
+		animation: fadeIn 0.2s ease;
 	}
 
 	@media (max-width: 768px) {
@@ -393,18 +416,18 @@
 			top: 0;
 			height: 100vh;
 			z-index: 30;
+			transform: translateX(-100%);
+			transition: transform var(--transition-base);
+		}
+
+		.sidebar-wrapper.visible {
+			transform: translateX(0);
 		}
 
 		.sidebar-wrapper.hidden {
-			display: none;
-		}
-
-		.sidebar-overlay {
 			display: block;
-			position: fixed;
-			inset: 0;
-			background: rgba(0, 0, 0, 0.3);
-			z-index: 25;
+			transform: translateX(-100%);
+			pointer-events: none;
 		}
 
 		.chat-header {

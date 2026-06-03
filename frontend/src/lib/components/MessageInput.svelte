@@ -2,12 +2,15 @@
 	let { disabled = false, onSend }: { disabled?: boolean; onSend: (text: string) => void } = $props();
 
 	let inputText = $state('');
+	let inputRef: HTMLInputElement | undefined = $state();
+	let isFocused = $state(false);
 
 	function handleSubmit() {
 		const text = inputText.trim();
 		if (!text || disabled) return;
 		onSend(text);
 		inputText = '';
+		if (inputRef) inputRef.focus();
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
@@ -18,29 +21,35 @@
 	}
 </script>
 
-<form class="input-container" onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
-	<input
-		type="text"
-		bind:value={inputText}
-		onkeydown={handleKeydown}
-		placeholder="Type your message..."
-		disabled={disabled}
-		aria-label="Message input"
-		autocomplete="off"
-		maxlength="2000"
-	/>
+<form class="input-container" class:focused={isFocused} onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
+	<div class="input-wrapper">
+		<input
+			bind:this={inputRef}
+			type="text"
+			bind:value={inputText}
+			onkeydown={handleKeydown}
+			onfocus={() => isFocused = true}
+			onblur={() => isFocused = false}
+			placeholder="Type your message..."
+			disabled={disabled}
+			aria-label="Message input"
+			autocomplete="off"
+			maxlength="2000"
+		/>
+	</div>
 	<button
 		type="submit"
 		disabled={disabled || !inputText.trim()}
 		aria-label="Send message"
 		class="send-button"
+		class:has-text={inputText.trim().length > 0}
 	>
 		{#if disabled}
 			<span class="spinner"></span>
 		{:else}
 			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-				<line x1="22" y1="2" x2="11" y2="13"></line>
-				<polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+				<line x1="22" y1="2" x2="11" y2="13" />
+				<polygon points="22 2 15 22 11 13 2 9 22 2" />
 			</svg>
 		{/if}
 	</button>
@@ -50,82 +59,100 @@
 	.input-container {
 		display: flex;
 		gap: 0.5rem;
-		padding: 1rem 1.25rem;
-		background: white;
-		border-top: 1px solid #e2e8f0;
+		padding: 1rem 1.25rem 1.25rem;
+		background: var(--color-surface);
+		border-top: 1px solid var(--color-border);
+		align-items: flex-end;
+		transition: border-color var(--transition-fast);
+	}
+
+	.input-container.focused {
+		border-top-color: var(--color-primary-light);
+	}
+
+	.input-wrapper {
+		flex: 1;
+		display: flex;
 		align-items: center;
+		background: var(--color-bg);
+		border: 1.5px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		transition: all var(--transition-fast);
+	}
+
+	.input-container.focused .input-wrapper {
+		border-color: var(--color-primary);
+		background: var(--color-surface);
+		box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 	}
 
 	input {
 		flex: 1;
-		padding: 0.75rem 1rem;
-		border: 1px solid #e2e8f0;
-		border-radius: 0.75rem;
-		font-size: 0.925rem;
+		padding: 0.7rem 0.9rem;
+		border: none;
+		border-radius: var(--radius-lg);
+		font-size: 0.9rem;
 		font-family: inherit;
 		outline: none;
-		transition: border-color 0.2s ease, box-shadow 0.2s ease;
-		background: #f8fafc;
-	}
-
-	input:focus {
-		border-color: #3b82f6;
-		box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-		background: white;
+		background: transparent;
+		color: var(--color-text);
 	}
 
 	input:disabled {
-		opacity: 0.6;
+		opacity: 0.5;
 		cursor: not-allowed;
 	}
 
 	input::placeholder {
-		color: #94a3b8;
+		color: var(--color-text-muted);
+		font-size: 0.88rem;
 	}
 
 	.send-button {
-		width: 42px;
-		height: 42px;
+		width: 40px;
+		height: 40px;
 		border-radius: 50%;
 		border: none;
-		background: #3b82f6;
-		color: white;
+		background: var(--color-border-light);
+		color: var(--color-text-muted);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		cursor: pointer;
-		transition: all 0.2s ease;
+		transition: all var(--transition-fast);
 		flex-shrink: 0;
 	}
 
-	.send-button:hover:not(:disabled) {
-		background: #2563eb;
-		transform: scale(1.05);
-		box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+	.send-button.has-text {
+		background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
+		color: white;
+		box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
 	}
 
-	.send-button:active:not(:disabled) {
+	.send-button.has-text:hover {
+		transform: scale(1.08);
+		box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+	}
+
+	.send-button.has-text:active {
 		transform: scale(0.95);
 	}
 
 	.send-button:disabled {
-		background: #cbd5e1;
 		cursor: not-allowed;
 	}
 
 	.spinner {
 		width: 16px;
 		height: 16px;
-		border: 2px solid rgba(255, 255, 255, 0.3);
-		border-top-color: white;
+		border: 2px solid rgba(99, 102, 241, 0.2);
+		border-top-color: var(--color-primary);
 		border-radius: 50%;
 		animation: spin 0.6s linear infinite;
 		display: inline-block;
 	}
 
 	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
+		to { transform: rotate(360deg); }
 	}
 </style>
