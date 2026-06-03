@@ -72,33 +72,50 @@
 
 		// === Keyboard Shortcuts ===
 		const handleKeyboard = (e: KeyboardEvent) => {
-			// Don't trigger shortcuts when typing in input
+			// ── Skip modifier-only key presses (Ctrl, Shift, etc. pressed alone) ──
+			if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
+				return;
+			}
+
+			// ── Never intercept browser DevTools shortcuts ──
+			if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i', 'j', 'c'].includes(e.key.toLowerCase())) {
+				return;
+			}
+			// F12 — DevTools
+			if (e.key === 'F12') {
+				return;
+			}
+
+			// ── Don't trigger app shortcuts when typing in an input ──
 			const target = e.target as HTMLElement;
 			const isInputFocused = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
 
+			const key = e.key.toLowerCase();
+			const mod = e.ctrlKey || e.metaKey;
+
 			// Ctrl/Cmd + Shift + D — Toggle dark mode
-			if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'D') {
+			if (mod && e.shiftKey && key === 'd') {
 				e.preventDefault();
 				toggleTheme();
 				return;
 			}
 
 			// Ctrl/Cmd + Shift + N — New conversation
-			if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'N') {
+			if (mod && e.shiftKey && key === 'n') {
 				e.preventDefault();
 				handleNewChat();
 				return;
 			}
 
 			// Ctrl/Cmd + K — Focus message input (unless already typing)
-			if ((e.ctrlKey || e.metaKey) && e.key === 'k' && !isInputFocused) {
+			if (mod && key === 'k' && !isInputFocused) {
 				e.preventDefault();
 				focusInput();
 				return;
 			}
 
 			// Escape — Close sidebar on mobile
-			if (e.key === 'Escape' && sidebarOpen && isMobile) {
+			if (key === 'escape' && sidebarOpen && isMobile) {
 				e.preventDefault();
 				sidebarOpen = false;
 				return;
