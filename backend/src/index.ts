@@ -13,10 +13,36 @@ const PORT = Number(process.env.PORT) || 3001;
 app.set('trust proxy', 1);
 
 // Middleware
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3001',
+  'https://spur-assignment.vercel.app',
+];
+if (process.env.FRONTEND_URL) {
+  // Add the configured FRONTEND_URL (with and without trailing slash)
+  const url = process.env.FRONTEND_URL.replace(/\/+$/, '');
+  if (!allowedOrigins.includes(url)) {
+    allowedOrigins.push(url);
+  }
+}
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-  methods: ['GET', 'POST'],
+  origin: (origin, callback) => {
+    // Allow requests with no origin (server-to-server, curl, etc.)
+    if (!origin) {
+      return callback(null, true);
+    }
+    // Strip trailing slash from origin before comparing
+    const normalized = origin.replace(/\/+$/, '');
+    if (allowedOrigins.some(o => normalized.startsWith(o))) {
+      return callback(null, true);
+    }
+    console.warn(`[CORS] Blocked origin: ${origin}`);
+    callback(null, false);
+  },
+  methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type'],
+  credentials: true,
 }));
 app.use(express.json({ limit: '1mb' }));
 
