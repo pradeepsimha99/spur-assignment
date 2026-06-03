@@ -47,9 +47,37 @@
 		const diffMs = now.getTime() - d.getTime();
 		const diffMin = Math.floor(diffMs / (1000 * 60));
 
+		// Less than 1 minute
 		if (diffMin < 1) return 'Just now';
-		if (diffMin < 60) return diffMin + 'm ago';
-		return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+		// Less than 60 minutes — relative "Xm ago"
+		if (diffMin < 60) return `${diffMin}m ago`;
+
+		// Calendar-day offset (uses Math.round for DST safety)
+		const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+		const msgDateStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+		const calendarDaysAgo = Math.round((todayStart.getTime() - msgDateStart.getTime()) / (1000 * 60 * 60 * 24));
+
+		const timeStr = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+		// Same day — just the time
+		if (calendarDaysAgo === 0) return timeStr;
+
+		// Yesterday
+		if (calendarDaysAgo === 1) return `Yesterday ${timeStr}`;
+
+		// This week — day name + time
+		if (calendarDaysAgo < 7) {
+			return d.toLocaleDateString(undefined, { weekday: 'short' }) + ' ' + timeStr;
+		}
+
+		// This year — month + day + time
+		if (d.getFullYear() === now.getFullYear()) {
+			return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ', ' + timeStr;
+		}
+
+		// Older — full date + time
+		return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + ', ' + timeStr;
 	}
 
 	function formatDateSeparator(date: Date): string {
